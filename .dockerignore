@@ -1,0 +1,15 @@
+.git
+.github
+.venv
+__pycache__
+*.pyc
+.pytest_cache
+.ruff_cache
+models
+results
+tests
+dags
+monitoring
+.env
+.env.*
+.DS_Store

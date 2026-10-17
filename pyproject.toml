@@ -1,0 +1,17 @@
+[project]
+name = "triagem-laudos"
+version = "1.0.0"
+description = "Triagem automatica de urgencia de laudos medicos (NLP) - Tech Challenge Fase 3"
+requires-python = ">=3.11"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+src = ["src", "tests", "scripts", "dags"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
