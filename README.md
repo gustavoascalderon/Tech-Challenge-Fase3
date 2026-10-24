@@ -23,7 +23,7 @@ no Prometheus e Grafana.
 
 ### Evolução da Publicação
 
-Esta versão acompanha a conclusão dos commits 1 a 4 pelo integrante A.
+Esta versão acompanha a conclusão dos commits 5 a 8 pelo integrante B.
 Os estados abaixo indicam arquivos integrados, não a conclusão automática de todas as validações.
 
 ---
@@ -114,9 +114,43 @@ A promoção de um modelo do Airflow para a API precisaria de integração adici
 
 ### Opção 1: Execução com Docker (Recomendado)
 
-Dockerfile e API entram na publicação B; o Compose completo entra na C. Nesta primeira
-publicação, use a execução local de treinamento abaixo. Os comandos Docker serão
-acrescentados quando os respectivos arquivos forem integrados.
+A API e o Dockerfile estão integrados nesta publicação. Na raiz do projeto:
+
+```bash
+docker build -t triagem-laudos:local .
+docker run --rm -p 8000:8000 triagem-laudos:local
+```
+
+O build treina e exporta o modelo; a API utiliza ONNX por padrão. Para usar sklearn,
+encerre a instância anterior e execute:
+
+```bash
+docker run --rm -p 8000:8000 -e MODEL_BACKEND=sklearn triagem-laudos:local
+```
+
+| Serviço | Endereço |
+|---|---|
+| API (Swagger) | http://localhost:8000/docs |
+| Saúde da API | http://localhost:8000/health |
+| Métricas | http://localhost:8000/metrics |
+
+Exemplo de classificação no macOS/Linux:
+
+```bash
+curl -X POST http://localhost:8000/classificar \
+  -H 'Content-Type: application/json' \
+  -d '{"texto":"patient presents with malignant tumor and requires further examination"}'
+```
+
+No Windows PowerShell:
+
+```powershell
+$corpo = @{texto = 'patient presents with malignant tumor and requires further examination'} | ConvertTo-Json
+Invoke-RestMethod -Uri http://localhost:8000/classificar -Method Post -ContentType 'application/json' -Body $corpo
+```
+
+A resposta contém urgência, confiança, probabilidades, backend e tempo de inferência.
+O Compose completo de API, Prometheus e Grafana entra na publicação C.
 
 ### Opção 2: Execução Local
 
@@ -144,6 +178,21 @@ Treine e exporte o modelo:
 ```bash
 python scripts/treinar.py
 ```
+
+Para iniciar a API localmente no macOS/Linux:
+
+```bash
+PYTHONPATH=src python -m uvicorn triagem.api.main:app --host 127.0.0.1 --port 8000
+```
+
+No PowerShell:
+
+```powershell
+$env:PYTHONPATH = 'src'
+python -m uvicorn triagem.api.main:app --host 127.0.0.1 --port 8000
+```
+
+Encerre a instância anterior antes de utilizar novamente a porta 8000.
 
 ---
 
@@ -310,8 +359,8 @@ atual. Mudanças devem ser feitas na configuração ou na construção do pipeli
 
 ### Visualizar Métricas
 
-A instrumentação da API é integrada por B; a coleta Prometheus e o dashboard Grafana,
-por C. As métricas abaixo fazem parte da arquitetura planejada desta primeira publicação.
+A API expõe as métricas abaixo em `/metrics` por meio de `prometheus_client`.
+A coleta Prometheus e o dashboard Grafana serão integrados por C.
 
 | Métrica | Tipo | Uso |
 |---|---|---|
@@ -340,9 +389,31 @@ nem realiza deploy automático.
 
 ### Orquestração de Retreino
 
-A DAG `treino_triagem_laudos`, semanal, será publicada por B em
-`dags/treino_triagem_dag.py`. Suas tarefas serão `carregar_dados` → `treinar_modelo` →
-`exportar_onnx`, usando as funções já integradas em `src/triagem/pipeline_treino.py`.
+A DAG semanal `treino_triagem_laudos` está em
+[`dags/treino_triagem_dag.py`](dags/treino_triagem_dag.py). Suas tarefas são
+`carregar_dados` → `treinar_modelo` → `exportar_onnx`, usando as funções compartilhadas
+em `src/triagem/pipeline_treino.py`.
+
+Para subir o Airflow local:
+
+```bash
+docker compose -f docker-compose.airflow.yml up -d
+docker compose -f docker-compose.airflow.yml logs airflow
+```
+
+Abra http://localhost:8080. Consulte o usuário e a senha gerados pelo modo `standalone`
+no log, ative a DAG e dispare uma execução manual. Confira as três tarefas concluídas
+e os artefatos em `models/`.
+
+Para conferir erros de importação:
+
+```bash
+docker compose -f docker-compose.airflow.yml exec airflow airflow dags list-import-errors
+```
+
+O primeiro início instala dependências adicionais. Se houver falha de escrita, confira as
+permissões de `models/` montado no contêiner. A execução da DAG faz parte da validação da entrega.
+Para encerrar, use `docker compose -f docker-compose.airflow.yml down`.
 
 ### Disponibilização de Novos Modelos
 

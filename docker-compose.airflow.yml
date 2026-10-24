@@ -1,0 +1,20 @@
+# Airflow local (opcional) para executar a DAG de treino/retreino.
+# Subir:  docker compose -f docker-compose.airflow.yml up
+# Interface: http://localhost:8080  (usuario/senha impressos no log: "standalone | Login with ...")
+services:
+  airflow:
+    image: apache/airflow:2.10.5-python3.12
+    container_name: triagem-airflow
+    command: standalone
+    environment:
+      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+      AIRFLOW__CORE__DAGS_FOLDER: /opt/airflow/projeto/dags
+      PYTHONPATH: /opt/airflow/projeto/src
+      _PIP_ADDITIONAL_REQUIREMENTS: "scikit-learn==1.8.0 pandas skl2onnx==1.20.0 onnxruntime==1.24.4 onnx joblib"
+    volumes:
+      - ./dags:/opt/airflow/projeto/dags
+      - ./src:/opt/airflow/projeto/src
+      - ./data:/opt/airflow/projeto/data
+      - ./models:/opt/airflow/projeto/models
+    ports:
+      - "8080:8080"
