@@ -31,6 +31,8 @@ jobs:
           cache-dependency-path: requirements-dev.txt
       - run: pip install -r requirements-dev.txt
       - run: pytest -v
+      - name: Auditoria dos dados (gate de qualidade)
+        run: python scripts/auditar_dados.py
 
   build:
     name: Build da imagem Docker
