@@ -12,7 +12,7 @@ from pathlib import Path
 
 from triagem import modelo, onnx_export
 from triagem.config import Config, obter_config
-from triagem.dados import carregar_dataset
+from triagem.dados import carregar_treino_teste
 
 log = logging.getLogger(__name__)
 
@@ -20,8 +20,9 @@ log = logging.getLogger(__name__)
 def etapa_carregar_dados(cfg: Config | None = None) -> dict[str, int]:
     """Etapa 1: le os CSVs, aplica o mapeamento de urgencia e valida o volume minimo."""
     cfg = cfg or obter_config()
-    treino = carregar_dataset(cfg.dados_treino)
-    teste = carregar_dataset(cfg.dados_teste)
+    treino, teste = carregar_treino_teste(cfg.dados_treino, cfg.dados_teste)
+    if set(treino["texto"]) & set(teste["texto"]):
+        raise ValueError("Vazamento: ha textos iguais no treino e no teste")
     if len(treino) < 2000:
         raise ValueError(f"Dataset de treino com {len(treino)} linhas (minimo exigido: 2000)")
     resumo = {"n_treino": len(treino), "n_teste": len(teste)}
@@ -32,8 +33,7 @@ def etapa_carregar_dados(cfg: Config | None = None) -> dict[str, int]:
 def etapa_treinar(cfg: Config | None = None) -> dict[str, float]:
     """Etapa 2: treina o classificador, avalia e salva o modelo (.joblib)."""
     cfg = cfg or obter_config()
-    treino = carregar_dataset(cfg.dados_treino)
-    teste = carregar_dataset(cfg.dados_teste)
+    treino, teste = carregar_treino_teste(cfg.dados_treino, cfg.dados_teste)
     pipeline, metricas = modelo.treinar(treino, teste, cfg)
     modelo.salvar(pipeline, metricas, cfg)
     resumo = {"acuracia": metricas["acuracia"], "f1_macro": metricas["f1_macro"]}
@@ -48,7 +48,7 @@ def etapa_exportar_onnx(cfg: Config | None = None) -> dict[str, float]:
     cfg = cfg or obter_config()
     pipeline = joblib.load(cfg.modelo_joblib)
     onnx_export.exportar_onnx(pipeline, cfg.modelo_onnx)
-    teste = carregar_dataset(cfg.dados_teste)
+    _, teste = carregar_treino_teste(cfg.dados_treino, cfg.dados_teste)
     concordancia = onnx_export.taxa_concordancia(pipeline, cfg.modelo_onnx, teste["texto"].tolist())
     log.info("ONNX salvo em %s (concordancia com sklearn: %.4f)", cfg.modelo_onnx, concordancia)
     return {"concordancia_onnx_sklearn": round(concordancia, 4)}
