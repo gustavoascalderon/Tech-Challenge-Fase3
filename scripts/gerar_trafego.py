@@ -14,7 +14,7 @@ import httpx
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from triagem.config import obter_config  # noqa: E402
-from triagem.dados import carregar_dataset  # noqa: E402
+from triagem.dados import carregar_treino_teste  # noqa: E402
 
 
 def main() -> None:
@@ -23,7 +23,11 @@ def main() -> None:
     ap.add_argument("--segundos", type=int, default=90)
     ap.add_argument("--taxa-erro", type=float, default=0.08, help="fracao de requisicoes invalidas")
     args = ap.parse_args()
-    textos = carregar_dataset(obter_config().dados_teste)["texto"].head(500).tolist()
+    textos = (
+        carregar_treino_teste(obter_config().dados_treino, obter_config().dados_teste)[1]["texto"]
+        .head(500)
+        .tolist()
+    )
     fim = time.time() + args.segundos
     total = erros = 0
     with httpx.Client(base_url=args.url, timeout=10) as cliente:
