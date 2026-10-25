@@ -1,0 +1,16 @@
+{
+  "n_amostras": 500,
+  "sklearn_original": {
+    "media_ms": 0.477,
+    "p50_ms": 0.47,
+    "p95_ms": 0.602,
+    "p99_ms": 0.675
+  },
+  "onnx_otimizado": {
+    "media_ms": 0.089,
+    "p50_ms": 0.087,
+    "p95_ms": 0.13,
+    "p99_ms": 0.162
+  },
+  "speedup_media": 5.4
+}

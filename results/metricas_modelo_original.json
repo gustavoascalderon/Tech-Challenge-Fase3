@@ -1,0 +1,18 @@
+{
+  "descricao": "Modelo treinado com a carga ORIGINAL (antes da auditoria); referencia.",
+  "n_treino": 9445,
+  "textos_iguais_em_treino_e_teste": 988,
+  "avaliacao_no_teste_original": {
+    "acuracia": 0.5469,
+    "f1_macro": 0.5252,
+    "baseline_classe_majoritaria": 0.435,
+    "n_teste": 2770
+  },
+  "avaliacao_no_teste_limpo": {
+    "acuracia": 0.7327,
+    "f1_macro": 0.7083,
+    "baseline_classe_majoritaria": 0.4978,
+    "n_teste": 1788
+  },
+  "observacao": "A acuracia no teste original e afetada por vazamento e rotulos ambiguos; a avaliacao no teste limpo e a comparavel com o modelo revisado."
+}

@@ -1,0 +1,88 @@
+{
+  "inventario": [
+    {
+      "arquivo": "models/modelo.joblib",
+      "existe": true,
+      "tamanho_bytes": 310020,
+      "sha256": "8b4852f2263d6b60802cfe82e5b55a7f141c36e3b4c687d28df7b772731258e3"
+    },
+    {
+      "arquivo": "models/modelo.onnx",
+      "existe": true,
+      "tamanho_bytes": 204222,
+      "sha256": "fc7bffd3f0586a7f3c794638baad1a0b93a596530f60cb495f48fb1c22bf8ace"
+    },
+    {
+      "arquivo": "models/classes.json",
+      "existe": true,
+      "tamanho_bytes": 32,
+      "sha256": "8a761aca8ee06e9d0bdb1dc7a9c096f61e69b8a59520ae598c5cee6654602496"
+    },
+    {
+      "arquivo": "models/metricas_treino.json",
+      "existe": true,
+      "tamanho_bytes": 990,
+      "sha256": "db6a3c4559251553c1f5eb8772888d58f7dfe81cb43f4ce4b37fb551eaa8782e"
+    },
+    {
+      "arquivo": "data/raw/medical_tc_labels.csv",
+      "existe": true,
+      "tamanho_bytes": 157,
+      "sha256": "8a27ae03339c798103678efa8012f744a723ff71a80f2b2c1355ee249564adc5"
+    },
+    {
+      "arquivo": "data/raw/medical_tc_test.csv",
+      "existe": true,
+      "tamanho_bytes": 3586836,
+      "sha256": "1eecea73c9ecad292c55e10403bd139fab9580545d6878482997c5564d51ac05"
+    },
+    {
+      "arquivo": "data/raw/medical_tc_train.csv",
+      "existe": true,
+      "tamanho_bytes": 14254503,
+      "sha256": "ad53aebc682d6b87a5647f619a079bb446d286fdc93bf0159b812418f5758609"
+    }
+  ],
+  "versoes": [
+    {
+      "pacote": "scikit-learn",
+      "fixada": "1.8.0",
+      "instalada": "1.8.0",
+      "ok": true
+    },
+    {
+      "pacote": "skl2onnx",
+      "fixada": "1.20.0",
+      "instalada": "1.20.0",
+      "ok": true
+    },
+    {
+      "pacote": "onnxruntime",
+      "fixada": "1.24.4",
+      "instalada": "1.24.4",
+      "ok": true
+    }
+  ],
+  "detalhes": {
+    "onnx_entradas": [
+      [
+        "texto",
+        "tensor(string)"
+      ]
+    ],
+    "onnx_saidas": [
+      "label",
+      "probabilities"
+    ],
+    "acuracia_reavaliada": 0.7444,
+    "acuracia_salva": 0.7444
+  },
+  "verificacoes": {
+    "artefatos_do_modelo_existem": true,
+    "classes_json_confere_com_modelo": true,
+    "onnx_assinatura_esperada": true,
+    "metricas_salvas_conferem": true,
+    "versoes_fixadas_conferem": true
+  },
+  "aprovado": true
+}

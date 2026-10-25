@@ -1,0 +1,40 @@
+{
+  "n_teste": 1788,
+  "acuracia_sklearn": 0.7444,
+  "acuracia_onnx": 0.7472,
+  "f1_macro_onnx": 0.7224,
+  "baseline": 0.4978,
+  "concordancia_onnx_sklearn": 0.9927,
+  "matriz_confusao": {
+    "classes": [
+      "atencao",
+      "normal",
+      "urgente"
+    ],
+    "valores": [
+      [
+        274,
+        91,
+        36
+      ],
+      [
+        67,
+        321,
+        109
+      ],
+      [
+        35,
+        114,
+        741
+      ]
+    ]
+  },
+  "verificacoes": {
+    "acuracia_onnx_maior_que_baseline": true,
+    "concordancia_onnx_sklearn_>=_0.97": true,
+    "probabilidades_somam_1": true,
+    "contrato_da_api_ok": true,
+    "api_rejeita_texto_curto_422": true
+  },
+  "aprovado": true
+}

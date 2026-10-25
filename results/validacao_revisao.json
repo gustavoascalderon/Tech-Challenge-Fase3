@@ -1,0 +1,59 @@
+{
+  "verificacoes": {
+    "pytest": {
+      "status": "ok",
+      "resumo": "18 passed, 1 warning in 0.86s"
+    },
+    "ruff": {
+      "status": "ok",
+      "resumo": "All checks passed!"
+    },
+    "auditoria_dados": {
+      "status": "ok",
+      "arquivo": "results/auditoria_dados.json"
+    },
+    "validacao_modelo": {
+      "status": "ok",
+      "arquivo": "results/validacao_modelo.json"
+    },
+    "auditoria_artefatos": {
+      "status": "ok",
+      "arquivo": "results/auditoria_artefatos_recebidos.json"
+    },
+    "yaml_validos": {
+      "status": "ok"
+    },
+    "dashboard_grafana": {
+      "status": "ok",
+      "paineis": 6
+    },
+    "dag_airflow": {
+      "status": "ok"
+    },
+    "readme_referencias": {
+      "status": "ok",
+      "arquivos_ausentes": []
+    }
+  },
+  "comparacao_antes_depois": {
+    "original_no_teste_original": {
+      "acuracia": 0.5469,
+      "f1_macro": 0.5252,
+      "baseline_classe_majoritaria": 0.435,
+      "n_teste": 2770
+    },
+    "original_no_teste_limpo": {
+      "acuracia": 0.7327,
+      "f1_macro": 0.7083,
+      "baseline_classe_majoritaria": 0.4978,
+      "n_teste": 1788
+    },
+    "revisado_no_teste_limpo": {
+      "acuracia": 0.7444,
+      "f1_macro": 0.7193,
+      "n_teste": 1788
+    },
+    "textos_iguais_em_treino_e_teste_no_original": 988
+  },
+  "aprovado": true
+}

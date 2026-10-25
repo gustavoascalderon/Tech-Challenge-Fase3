@@ -1,0 +1,85 @@
+{
+  "bruto": {
+    "treino": {
+      "linhas": 11550,
+      "textos_duplicados": 2105,
+      "textos_com_condicao_conflitante": 1956,
+      "textos_com_urgencia_conflitante": 1880,
+      "palavras_min": 24,
+      "palavras_mediana": 175,
+      "palavras_max": 596,
+      "distribuicao_condicao": {
+        "1": 0.219,
+        "2": 0.1035,
+        "3": 0.1333,
+        "4": 0.2113,
+        "5": 0.3328
+      }
+    },
+    "teste": {
+      "linhas": 2888,
+      "textos_duplicados": 118,
+      "textos_com_condicao_conflitante": 113,
+      "textos_com_urgencia_conflitante": 107,
+      "palavras_min": 29,
+      "palavras_mediana": 179,
+      "palavras_max": 528,
+      "distribuicao_condicao": {
+        "1": 0.2192,
+        "2": 0.1035,
+        "3": 0.1333,
+        "4": 0.2112,
+        "5": 0.3328
+      }
+    }
+  },
+  "sobreposicao_treino_teste_bruta": 988,
+  "limpo": {
+    "n_treino": 7565,
+    "n_teste": 1788,
+    "distribuicao_urgencia_treino": {
+      "urgente": 0.4846,
+      "normal": 0.2998,
+      "atencao": 0.2156
+    },
+    "distribuicao_urgencia_teste": {
+      "urgente": 0.4978,
+      "normal": 0.278,
+      "atencao": 0.2243
+    },
+    "baseline_classe_majoritaria_teste": 0.4978
+  },
+  "verificacoes": [
+    {
+      "nome": "Sem texto repetido entre treino e teste (vazamento)",
+      "ok": true,
+      "detalhe": "988 textos repetidos no original, 0 apos limpeza"
+    },
+    {
+      "nome": "Treino com no minimo 2000 amostras (exigencia do enunciado)",
+      "ok": true,
+      "detalhe": "7565 amostras"
+    },
+    {
+      "nome": "As 3 classes de urgencia estao presentes",
+      "ok": true,
+      "detalhe": "{'urgente': 0.4846, 'normal': 0.2998, 'atencao': 0.2156}"
+    },
+    {
+      "nome": "Nenhuma classe com menos de 5% do treino",
+      "ok": true,
+      "detalhe": "menor classe: 21.6%"
+    },
+    {
+      "nome": "Sem textos nulos ou vazios",
+      "ok": true,
+      "detalhe": "menor texto: 169 caracteres"
+    },
+    {
+      "nome": "Sem texto com urgencia conflitante apos limpeza",
+      "ok": true,
+      "detalhe": "duplicatas e conflitos removidos"
+    }
+  ],
+  "aprovado": true
+}
