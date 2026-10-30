@@ -1,310 +1,423 @@
-# Triagem Automática de Laudos Médicos — Tech Challenge Fase 3 (FIAP PosTech MLET)
+# Tech Challenge - Fase 3 - Machine Learning Engineering
 
-Classificador de texto (NLP) que recebe o texto de um laudo e devolve a urgência
-(`normal` / `atencao` / `urgente`), servido por **API REST (FastAPI) em Docker**, com
-**CI/CD (GitHub Actions)**, **retreino orquestrado (Airflow)**, **monitoramento
-(Prometheus + Grafana)** e **otimização de latência (ONNX Runtime)**.
+**FIAP PosTech | Programa de Pós-Graduação em Machine Learning Engineering**
 
-> ⚠️ Projeto acadêmico. Não deve ser usado para decisões clínicas reais (veja
-> [Limitações](#limitações-e-honestidade-dos-resultados)).
+---
 
-## Sumário
-1. [Arquitetura](#arquitetura)
-2. [Decisão arquitetural de nuvem](#decisão-arquitetural-de-nuvem-etapa-1)
-3. [Dataset e mapeamento de urgência](#dataset-e-mapeamento-de-urgência)
-4. [Como executar (passo a passo)](#como-executar-passo-a-passo)
-5. [Resultados](#resultados)
-6. [CI/CD](#cicd-etapa-2)
-7. [Airflow](#airflow-etapa-2)
-8. [Monitoramento](#monitoramento-etapa-3)
-9. [Otimização de latência](#otimização-de-latência-etapa-4)
-10. [Estrutura do repositório](#estrutura-do-repositório)
-11. [Limitações](#limitações-e-honestidade-dos-resultados)
-12. [Vídeo STAR](#vídeo-star)
+## Sobre o Projeto
 
-## Arquitetura
+Protótipo de **triagem automática de textos médicos** que classifica urgência em
+`normal`, `atencao` ou `urgente`. A Fase 3 demonstra o ciclo de implantação de um modelo
+NLP leve, com serviço de inferência em Docker, integração contínua, retreino orquestrado,
+monitoramento e otimização de latência.
 
-```
- laudo (texto) ──► FastAPI (/classificar) ──► ONNX Runtime (TF-IDF + Reg. Logística) ──► urgência
-                      │  /metrics (prometheus_client)
-                      ▼
-                 Prometheus ──► Grafana (dashboard com 6 painéis)
+### Objetivo
 
- GitHub push ──► GitHub Actions: lint (ruff) → testes (pytest) → build Docker
+Treinar um classificador TF-IDF + Regressão Logística, exportá-lo para ONNX Runtime e
+comparar os backends em qualidade e tempo de resposta. Disponibilizar a inferência via
+FastAPI, automatizar lint, testes e build, executar retreino no Airflow e visualizar métricas
+no Prometheus e Grafana.
 
- Airflow (semanal): carregar_dados ──► treinar_modelo ──► exportar_onnx ──► models/
-```
+> Projeto acadêmico. Os dados são resumos médicos em inglês e os rótulos de urgência são
+> aproximações definidas pelo projeto, sem validação clínica. Não utilizar para decisões clínicas.
 
-| Camada | Tecnologia |
+### Evolução da Publicação
+
+Esta versão acompanha a conclusão dos commits 1 a 4 pelo integrante A.
+Os estados abaixo indicam arquivos integrados, não a conclusão automática de todas as validações.
+
+---
+
+## Arquitetura e Tecnologias
+
+### Stack Técnico
+
+| Componente | Tecnologia |
 |---|---|
-| Modelo | scikit-learn: `TfidfVectorizer` + `LogisticRegression` |
-| Otimização | `skl2onnx` + `onnxruntime` |
-| API | FastAPI + Uvicorn |
-| Métricas | `prometheus_client` |
-| Orquestração | Apache Airflow (DAG) |
-| Observabilidade | Prometheus + Grafana (Docker Compose) |
-| CI/CD | GitHub Actions |
+| **ML Framework** | Scikit-Learn: TF-IDF + Regressão Logística |
+| **Otimização** | skl2onnx + ONNX Runtime, CPU |
+| **Dados** | Pandas + CSVs públicos |
+| **Dependências** | pip, requirements.txt e requirements-dev.txt; Python 3.12 |
+| **API** | FastAPI + Uvicorn + Pydantic |
+| **Container** | Docker + Dockerfile |
+| **Logging** | logging da biblioteca padrão |
+| **Instrumentação** | prometheus_client |
+| **Retreino** | Apache Airflow |
+| **Monitoramento** | Prometheus + Grafana via Docker Compose |
+| **Code Quality** | Ruff: lint e formatação |
+| **Testing** | pytest + FastAPI TestClient |
+| **CI e build** | GitHub Actions |
 
-## Decisão arquitetural de nuvem (Etapa 1)
+### Estrutura do Projeto
 
-**Pergunta:** batch ou tempo real? **Resposta: tempo real para a triagem + batch para o retreino.**
+```text
+src/triagem/__init__.py
+src/triagem/config.py
+src/triagem/dados.py
+src/triagem/modelo.py
+src/triagem/onnx_export.py
+src/triagem/pipeline_treino.py
+src/triagem/predictor.py
+src/triagem/metricas.py
+src/triagem/api/__init__.py
+src/triagem/api/main.py
+scripts/treinar.py
+scripts/gerar_trafego.py
+scripts/benchmark_latencia.py
+scripts/latencia_api.py
+scripts/auditar_dados.py
+data/README.md
+data/raw/
+models/
+results/
+dags/treino_triagem_dag.py
+monitoring/
+tests/
+.github/workflows/ci.yml
+docs/
+pyproject.toml
+requirements.txt
+requirements-dev.txt
+.dockerignore
+.gitignore
+Dockerfile
+docker-compose.airflow.yml
+docker-compose.yml
+README.md
+```
 
-| Critério | Batch | Tempo real (escolhido p/ inferência) |
+### Decisão de Deploy em Nuvem
+
+**Inferência em tempo real e retreino em batch.** A API atende cada texto na chegada;
+o treinamento pode ocorrer em uma janela periódica.
+
+| Critério | Batch | Tempo real |
 |---|---|---|
-| Objetivo clínico | Classificar laudos acumulados | Priorizar o laudo **assim que chega** |
-| Latência aceitável | Minutos/horas | Dezenas de ms |
-| Risco de atraso | Laudo urgente espera a próxima janela | Mínimo |
-| Custo | Menor (computa só quando roda) | Maior, mas o modelo é leve (~0,1 ms de inferência) |
+| Aplicação no projeto | Retreino agendado | Classificação por requisição |
+| Espera | Depende da janela de execução | Depende da duração da requisição |
+| Disponibilidade | Recursos podem ser alocados por execução | Serviço de inferência disponível continuamente |
 
-**Proposta de deploy (agnóstica de provedor; exemplo AWS):**
-- **Inferência (tempo real):** a imagem Docker desta API roda em um serviço de contêineres
-  gerenciado (**AWS ECS Fargate** atrás de um Application Load Balancer; equivalentes: Cloud Run no
-  GCP, Azure Container Apps), com *autoscaling* por CPU/requisições. Como o modelo é pequeno
-  (~0,5 MB) e só usa CPU, não há necessidade de GPU.
-- **Retreino (batch):** DAG do Airflow (ex.: **MWAA**) executada semanalmente; o novo `modelo.onnx`
-  é publicado em um bucket (S3) e a imagem é reconstruída/publicada (ECR) pelo CI/CD.
-- **Observabilidade:** Prometheus/Grafana gerenciados (Amazon Managed Prometheus/Grafana) ou a
-  mesma stack deste repositório.
-- **Dados sensíveis (LGPD):** laudos são dados de saúde → região `sa-east-1`, criptografia em
-  trânsito e em repouso, acesso por IAM mínimo e **sem registrar o texto dos laudos em logs**
-  (a API só registra métricas agregadas).
+Proposta teórica na AWS: API em ECS Fargate atrás de ALB, imagens no ECR, dados e artefatos
+no S3 e Airflow no MWAA. O modelo utiliza CPU. Prometheus e Grafana podem ter operação gerenciada.
+O repositório não provisiona essa infraestrutura; a implementação a demonstrar é local em Docker.
+A promoção de um modelo do Airflow para a API precisaria de integração adicional.
 
-## Dataset e mapeamento de urgência
+---
 
-Foi usado o **Medical Abstracts TC Corpus** (resumos médicos, ~11 mil amostras de treino;
-[repositório oficial](https://github.com/sebischair/Medical-Abstracts-TC-Corpus)). Ele rotula a
-**condição** do paciente (5 classes), **não** a urgência. Como o enunciado aceita qualquer dataset
-texto + alvo com ≥ 2.000 amostras, adotamos um **mapeamento proxy** (decisão do projeto, **não**
-critério clínico validado):
+## Quickstart
 
-| Condição original | Urgência (proxy) |
-|---|---|
-| Neoplasias (1) e Doenças cardiovasculares (4) | `urgente` |
-| Doenças do sistema digestivo (2) e do sistema nervoso (3) | `atencao` |
-| Condições patológicas gerais (5) | `normal` |
+### Pré-requisitos
 
-**Auditoria dos dados** (`python scripts/auditar_dados.py` → `results/auditoria_dados.md`). Ela encontrou
-problemas no dataset original que foram corrigidos antes do treino:
+- Python 3.12 e Git.
+- Docker com Docker Compose para validar a API em contêiner e as stacks locais.
+- CSVs públicos em `data/raw/`, incluídos no projeto.
 
-| Problema encontrado | Quantidade | Tratamento |
-|---|---|---|
-| Textos **idênticos em treino e teste** (vazamento) | 988 | removidos do teste |
-| Textos duplicados no treino | 2.105 | mantido apenas um |
-| Textos com **urgência conflitante** no treino (mesmo resumo com rótulos diferentes) | 1.880 | removidos (rótulo ambíguo) |
+### Opção 1: Execução com Docker (Recomendado)
 
-Após a limpeza: **7.565** laudos de treino e **1.788** de teste (≥ 2.000 exigidos no treino).
-Os CSVs originais ficam em `data/raw/` (veja `data/README.md`).
+Dockerfile e API entram na publicação B; o Compose completo entra na C. Nesta primeira
+publicação, use a execução local de treinamento abaixo. Os comandos Docker serão
+acrescentados quando os respectivos arquivos forem integrados.
 
-## Como executar (passo a passo)
+### Opção 2: Execução Local
 
-Pré-requisitos: **Python 3.12**, **Docker Desktop** e Git. Comandos para **Windows (PowerShell)**;
-em Linux/Mac troque a ativação do ambiente por `source .venv/bin/activate`.
+Após clonar o repositório, execute na raiz.
 
-### 1) Ambiente Python e testes
+
+macOS/Linux:
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -r requirements-dev.txt
+```
+
+Windows PowerShell:
+
 ```powershell
 python -m venv .venv
 .venv\Scripts\Activate.ps1
-pip install -r requirements-dev.txt
-pytest -v
-ruff check .
+python -m pip install -r requirements-dev.txt
 ```
 
-### 2) Auditar os dados, treinar, validar e medir a latência
-```powershell
-python scripts/auditar_dados.py
+Treine e exporte o modelo:
+
+```bash
 python scripts/treinar.py
-python scripts/validar_modelo.py
-python scripts/auditar_artefatos.py
-python scripts/avaliar_modelo_original.py
-python scripts/benchmark_latencia.py
-python scripts/validar_revisao.py
 ```
-Gera `models/modelo.joblib`, `models/modelo.onnx` e os relatórios em `results/`:
 
-| Script | Relatório em `results/` | O que comprova |
-|---|---|---|
-| `auditar_dados.py` | `auditoria_dados.json` / `.md` | vazamento, duplicatas e rótulos conflitantes nos dados |
-| `validar_modelo.py` | `validacao_modelo.json` / `.md` | métricas, matriz de confusão, ONNX x sklearn, contrato da API |
-| `auditar_artefatos.py` | `auditoria_artefatos_recebidos.json` | inventário (tamanho e SHA-256) dos modelos e dados, versões fixadas e coerência das métricas |
-| `avaliar_modelo_original.py` | `metricas_modelo_original.json` | referência "antes": modelo treinado sem a limpeza dos dados |
-| `benchmark_latencia.py` | `latencia_modelo.json` / `.md` | latência sklearn x ONNX |
-| `validar_revisao.py` | `validacao_revisao.json` | consolidado: testes, lint, auditorias, YAMLs, dashboard, DAG, referências do README e comparação antes x depois |
+---
 
-> O SHA-256 dos modelos só vale para a máquina e o momento em que foram gerados (treinar de novo
-> gera arquivos binários diferentes). O que importa para o avaliador é a coerência registrada no relatório.
+## Pipeline de ML
 
-### 3) Subir a API + Prometheus + Grafana (Docker)
-```powershell
-docker compose up --build
-```
-| Serviço | URL |
+### Etapa 1: Preparação de Dados
+
+Executada por `etapa_carregar_dados()` no fluxo de `python scripts/treinar.py`.
+Não há script separado de preparação nem um novo split 80/20 nesta implementação.
+
+**Responsabilidades:**
+
+- Ler os CSVs de treino e teste fornecidos pela fonte.
+- Validar as colunas `condition_label` e `medical_abstract`.
+- Remover registros ausentes e duplicatas internas por texto.
+- Normalizar o texto em minúsculas e espaços.
+- Mapear cinco condições para três classes proxy de urgência.
+- Conferir pelo menos 2.000 registros no conjunto de treino.
+
+**Saída:** DataFrames em memória com `texto` e `urgencia`; os CSVs originais são preservados.
+
+#### Dataset e Mapeamento de Urgência
+
+Foi utilizado o **Medical Abstracts TC Corpus**, com resumos médicos em inglês e cinco
+classes de condições médicas: [repositório oficial](https://github.com/sebischair/Medical-Abstracts-TC-Corpus).
+Autores: Tim Schopf, Daniel Braun e Florian Matthes. A referência e a licença dos dados
+estão em [data/README.md](data/README.md).
+
+O corpus rotula **condições médicas**, não urgência. Para demonstrar o pipeline técnico,
+o projeto utiliza o seguinte **mapeamento proxy**, sem validação clínica:
+
+| Condição original | Urgência proxy |
 |---|---|
-| API (Swagger) | http://localhost:8000/docs |
-| Métricas brutas | http://localhost:8000/metrics |
-| Prometheus | http://localhost:9090 |
-| Grafana (admin / admin) | http://localhost:3000 → dashboard **Triagem de Laudos** |
+| Neoplasias (1) e doenças cardiovasculares (4) | `urgente` |
+| Doenças do sistema digestivo (2) e do sistema nervoso (3) | `atencao` |
+| Condições patológicas gerais (5) | `normal` |
 
-Teste rápido da API:
-```powershell
-curl -X POST http://localhost:8000/classificar -H "Content-Type: application/json" `
-  -d '{\"texto\": \"patient presents with malignant tumor and requires urgent chemotherapy evaluation\"}'
+Os CSVs originais ficam em `data/raw/`. A preparação atual remove duplicatas dentro de
+cada arquivo, resultando em **9.445 textos de treino e 2.770 de teste**. O conjunto de treino
+supera o mínimo de 2.000 amostras previsto na atividade.
+
+**Limitação identificada na revisão dos dados:** existem **988 textos compartilhados entre
+treino e teste**, sendo **949 com rótulos proxy diferentes**. A deduplicação interna não remove
+essa sobreposição. Assim, o teste atual não é composto integralmente por textos inéditos.
+É necessário definir uma política para conflitos de rótulo e para separação por texto antes
+de consolidar uma avaliação independente. O pipeline original foi preservado nesta versão.
+
+O script e o relatório da auditoria dos dados entram na publicação C.
+
+### Etapa 2: Treinamento
+
+```bash
+python scripts/treinar.py
 ```
 
-### 4) Gerar tráfego para o dashboard
-Em outro terminal (com o `.venv` ativo):
-```powershell
-python scripts/gerar_trafego.py --segundos 90
-```
-Abra o Grafana: os painéis passam a mostrar requisições, latência e taxa de erro
-(o script envia ~8% de requisições inválidas de propósito para o painel de erros).
+O comando executa preparação, treino, avaliação e exportação no mesmo fluxo.
 
-### 5) Baseline de latência local (Etapa 1)
-Para comparar modelo original x otimizado **via HTTP**, rode a API com cada backend:
-```powershell
-# baseline (sklearn): edite MODEL_BACKEND no docker-compose.yml para "sklearn", suba e meça
-python scripts/latencia_api.py --n 300
-# otimizado (onnx): volte para "onnx", suba novamente e meça
-python scripts/latencia_api.py --n 300
-```
+**Responsabilidades:**
 
-### 6) Airflow (opcional, para a DAG)
-```powershell
-docker compose -f docker-compose.airflow.yml up
-```
-Abra http://localhost:8080 (usuário/senha aparecem no log: `standalone | Login with ...`),
-ative a DAG **treino_triagem_laudos** e clique em *Trigger*.
+- Construir TF-IDF + Regressão Logística.
+- Treinar com os textos normalizados e os rótulos proxy.
+- Calcular métricas no arquivo de teste preparado.
+- Persistir o pipeline, as classes e as métricas.
 
-## Resultados
+**Saída:**
 
-### Modelo (conjunto de teste limpo, 1.788 laudos)
-| Métrica | Valor |
-|---|---|
-| Acurácia | **74,4 %** |
-| F1 macro | **71,9 %** |
-| Baseline (sempre prever a classe majoritária) | 49,8 % |
+- `models/modelo.joblib`
+- `models/classes.json`
+- `models/metricas_treino.json`
 
-Por classe (F1): `urgente` 0,83 · `atencao` 0,70 · `normal` 0,62.
-Matriz de confusão e demais verificações: `python scripts/validar_modelo.py` → `results/validacao_modelo.md`.
+Os artefatos em `models/` são ignorados pelo Git e regenerados pelo script ou pelo build Docker.
 
-> **Como interpretar:** esta acurácia **não é comparável** com a de uma avaliação sem limpeza. O teste
-> original continha textos repetidos do treino e resumos de rótulo ambíguo; removê-los torna a avaliação
-> mais honesta, porém mais fácil (só laudos de rótulo inequívoco). O *benchmark* ficou mais confiável.
+### Etapa 3: Avaliação
 
-**Comparação justa (mesmo teste limpo, 1.788 laudos):**
+A função `treinar()` calcula acurácia, F1 macro e relatório por classe. O indicador majoritário
+registrado é a frequência da classe mais comum no teste; não há um `DummyClassifier` treinado
+separadamente. A sobreposição e os conflitos de texto documentados acima limitam a avaliação.
 
-| Modelo | Acurácia | F1 macro |
+As métricas da sua execução ficam em `models/metricas_treino.json`. Os relatórios
+versionados e a comparação dos dois backends serão consolidados na publicação C.
+
+### Etapa 4: Otimização e Comparação de Latência
+
+A função `exportar_onnx()` converte TF-IDF e classificador em um grafo ONNX executado em CPU.
+A normalização é feita antes do modelo e compartilhada com a inferência.
+O comando de treino também exporta `models/modelo.onnx` e calcula a concordância das classes.
+
+Os scripts `scripts/benchmark_latencia.py` e `scripts/latencia_api.py`, com relatórios
+comparativos, serão integrados pelo integrante C. O baseline HTTP deve usar a API em Docker.
+
+---
+
+## Clean Code Implementado
+
+### Nomenclatura Descritiva
+
+- Funções de dados: `normalizar_texto()` e `carregar_dataset()`.
+- Funções de treinamento: `construir_pipeline()`, `treinar()` e `salvar()`.
+- Etapas compartilhadas: `etapa_carregar_dados()`, `etapa_treinar()` e `etapa_exportar_onnx()`.
+
+### Organização por Responsabilidades
+
+O pacote `src/triagem/` separa configuração, dados, modelo e exportação ONNX. A publicação
+B acrescenta predictors, métricas e API, mantendo essas responsabilidades em módulos próprios.
+`Config` e `Resultado` usam dataclasses, enquanto o protocolo `Predictor` permite alternar
+entre sklearn e ONNX sem alterar o contrato da API.
+
+### Docstrings e Logging
+
+Os módulos e as funções principais documentam seu propósito; o pipeline utiliza o módulo
+padrão `logging` para registrar carga, treinamento e exportação. As mensagens do pipeline
+registram resumos, sem imprimir o conteúdo integral dos textos.
+
+Os testes da API usam injeção de um predictor falso; os testes de modelo treinam dados
+sintéticos temporários. A suíte e o workflow de qualidade são integrados pelo integrante C.
+
+---
+
+## Configuração
+
+### Variáveis de Ambiente
+
+A configuração utiliza `os.environ` em `src/triagem/config.py`. No ambiente Python,
+exporte as variáveis antes de iniciar o processo. O código não carrega um arquivo `.env`
+automaticamente. O Compose da API define o backend em `docker-compose.yml`.
+
+| Variável | Padrão | Descrição |
 |---|---|---|
-| Treinado com os dados originais (sem limpeza) | 73,3 % | 70,8 % |
-| Treinado com os dados limpos (final) | **74,4 %** | **71,9 %** |
+| `DADOS_TREINO` | `data/raw/medical_tc_train.csv`, relativo à raiz do projeto | CSV de treinamento |
+| `DADOS_TESTE` | `data/raw/medical_tc_test.csv`, relativo à raiz do projeto | CSV de teste |
+| `DIR_MODELOS` | `models/`, relativo à raiz do projeto | Diretório dos artefatos |
+| `DIR_RESULTADOS` | `results/`, relativo à raiz do projeto | Diretório dos relatórios |
+| `MODEL_BACKEND` | `onnx` | Backend de inferência: `onnx` ou `sklearn` |
 
-Ou seja, limpar o treino rendeu cerca de +1 ponto percentual. Detalhes em
-`results/metricas_modelo_original.json` e `results/validacao_revisao.json`.
+No macOS/Linux, por exemplo:
 
-### Latência: modelo original (sklearn) x otimizado (ONNX Runtime)
+```bash
+export MODEL_BACKEND=onnx
+```
 
-Inferência de 1 laudo por vez (500 laudos, após aquecimento), medida em CPU:
+No PowerShell:
 
-| Modelo | média (ms) | p50 (ms) | p95 (ms) | p99 (ms) |
-|---|---|---|---|---|
-| sklearn (original) | 0.477 | 0.47 | 0.602 | 0.675 |
-| ONNX Runtime (otimizado) | 0.089 | 0.087 | 0.13 | 0.162 |
+```powershell
+$env:MODEL_BACKEND = 'onnx'
+```
 
-**Speedup médio: 5,4x** no tempo de inferência. A concordância das previsões ONNX x sklearn no
-teste foi de **99,3 %** (a conversão do `TfidfVectorizer` para ONNX pode divergir levemente na
-tokenização — comportamento documentado do `sklearn-onnx`).
+### Hiperparâmetros
 
-### Latência ponta a ponta (HTTP, API local, 300 requisições)
-| Backend | média (ms) | p95 (ms) |
+| Parâmetro | Valor atual | Local |
 |---|---|---|
-| sklearn | 2.34 | 3.00 |
-| ONNX | 1.77 | 2.42 |
+| `max_features` | 5.000 | `Config`, em `src/triagem/config.py` |
+| `random_state` | 42 | `Config`, em `src/triagem/config.py` |
+| `sublinear_tf` | `True` | TF-IDF, em `src/triagem/modelo.py` |
+| `lowercase` | `False` | TF-IDF; o texto já chega normalizado |
+| `C` | 5 | Regressão Logística, em `src/triagem/modelo.py` |
+| `max_iter` | 2.000 | Regressão Logística, em `src/triagem/modelo.py` |
 
-O ganho total é menor que 5,4x porque, na API, a maior parte dos ~2 ms é pilha HTTP
-(parsing, validação, serialização), não o modelo. Os números acima foram medidos fora do Docker;
-**meça de novo no seu contêiner** (passo 5) e use os seus valores no vídeo.
+Os hiperparâmetros da tabela não são sobrescritos por variáveis de ambiente na implementação
+atual. Mudanças devem ser feitas na configuração ou na construção do pipeline, seguidas de retreino.
 
-## CI/CD (Etapa 2)
+---
 
-Workflow: [`.github/workflows/ci.yml`](.github/workflows/ci.yml), disparado em todo `push` na
-`main` e em *pull requests*:
+## Monitoramento (Prometheus + Grafana)
 
-1. **lint** — `ruff check` e `ruff format --check`
-2. **test** — `pytest` (18 testes: dados, auditoria, modelo, ONNX, pipeline de treino, API, métricas e DAG) e
-   `python scripts/auditar_dados.py` (falha o CI se houver vazamento ou dados fora do padrão)
-3. **build** — `docker build` da imagem (só roda se lint e testes passarem)
+### Visualizar Métricas
 
-## Airflow (Etapa 2)
-
-DAG: [`dags/treino_triagem_dag.py`](dags/treino_triagem_dag.py) (`treino_triagem_laudos`, semanal):
-
-`carregar_dados` → `treinar_modelo` → `exportar_onnx`
-
-As três tarefas chamam funções de `src/triagem/pipeline_treino.py`, as mesmas usadas por
-`scripts/treinar.py` (uma única fonte de verdade).
-
-## Monitoramento (Etapa 3)
-
-A API expõe `/metrics` (via `prometheus_client`):
+A instrumentação da API é integrada por B; a coleta Prometheus e o dashboard Grafana,
+por C. As métricas abaixo fazem parte da arquitetura planejada desta primeira publicação.
 
 | Métrica | Tipo | Uso |
 |---|---|---|
-| `triagem_requisicoes_total{metodo,endpoint,status}` | Counter | total de requisições |
-| `triagem_latencia_requisicao_segundos` | Histogram | latência p50/p95/p99 |
-| `triagem_latencia_inferencia_segundos` | Histogram | tempo só do modelo |
-| `triagem_erros_total{endpoint,status}` | Counter | respostas ≥ 400 |
-| `triagem_predicoes_total{urgencia}` | Counter | classificações por classe |
-| `triagem_requisicoes_em_andamento` | Gauge | requisições simultâneas |
+| `triagem_requisicoes_total{metodo,endpoint,status}` | Counter | Total de requisições |
+| `triagem_latencia_requisicao_segundos{endpoint}` | Histogram | Latência por endpoint |
+| `triagem_latencia_inferencia_segundos` | Histogram | Tempo de inferência |
+| `triagem_erros_total{endpoint,status}` | Counter | Respostas com status maior ou igual a 400 |
+| `triagem_predicoes_total{urgencia}` | Counter | Predições por classe |
+| `triagem_requisicoes_em_andamento` | Gauge | Requisições em processamento |
 
-Dashboard provisionado automaticamente
-([`monitoring/grafana/dashboards/triagem.json`](monitoring/grafana/dashboards/triagem.json)),
-com **6 painéis**: total de requisições, requisições/s, latência (p50/p95/p99), taxa de erro (%),
-tempo de inferência e classificações por urgência.
+### Dashboard e Geração de Tráfego
 
-## Otimização de latência (Etapa 4)
+O provisionamento Grafana, o Compose completo e `scripts/gerar_trafego.py` serão
+publicados por C. O dashboard previsto possui seis painéis: total de requisições,
+requisições/s, latência, taxa de erro, inferência e classificações por urgência.
 
-Técnica aplicada: **conversão para ONNX Runtime** do pipeline completo (TF-IDF + classificador
-em um único grafo), em `src/triagem/onnx_export.py`.
-Decisões que importam:
-- O texto é normalizado (minúsculas) **antes** do modelo, no treino e na inferência, para evitar o
-  operador de normalização com *locale* do ONNX (que falha em imagens Docker sem `en_US.UTF-8`).
-- Foram comparados Regressão Logística e Random Forest com TF-IDF: a regressão logística teve
-  praticamente a mesma acurácia no teste limpo (74,4% x 73,9%), é menor e mais simples; por isso é o modelo final.
-  O Random Forest mostrou ganho de latência relativo maior com ONNX (≈ 30x na exploração), mas gera um
-  modelo maior e teve acurácia ligeiramente menor.
+---
 
-## Estrutura do repositório
+## Automação (GitHub Actions + Airflow)
 
-```
-├── .github/workflows/ci.yml       # lint → test → build
-├── dags/treino_triagem_dag.py     # DAG do Airflow
-├── data/raw/                      # CSVs do Medical Abstracts TC Corpus
-├── monitoring/                    # prometheus.yml + Grafana (datasource e dashboard)
-├── docs/                          # roteiro do vídeo STAR, checklist de entrega, guia de commits
-├── results/                       # relatórios: auditoria dos dados, validação do modelo, latência
-├── scripts/                       # treinar, auditar_dados, validar_modelo, benchmark, tráfego
-├── src/triagem/                   # código da aplicação (config, dados, auditoria, modelo, onnx, api...)
-├── tests/                         # pytest
-├── Dockerfile
-├── docker-compose.yml             # API + Prometheus + Grafana
-├── docker-compose.airflow.yml     # Airflow (opcional)
-└── requirements*.txt
-```
+### Integração Contínua e Build
 
-## Limitações e honestidade dos resultados
+O workflow `.github/workflows/ci.yml` entra na publicação C: lint e testes em paralelo,
+seguidos de build Docker se ambos passarem. A implementação prevista não publica imagem
+nem realiza deploy automático.
 
-- **Rótulos proxy:** o dataset não tem urgência clínica real; o mapeamento condição → urgência é
-  uma escolha do projeto. Um sistema real exigiria laudos rotulados por médicos.
-- **Qualidade moderada:** 74,4% de acurácia (baseline 49,8%) em um teste que **exclui** os laudos de rótulo
-  ambíguo; em dados reais, com casos ambíguos, o desempenho tende a ser pior. O corpus tem rótulos ruidosos
-  (um resumo pode tratar de várias condições). O foco desta fase é o **ciclo de vida MLOps**
-  (deploy, CI/CD, monitoramento e latência), não a acurácia.
-- **Idioma:** o corpus está em inglês; para laudos em português seria preciso retreinar com dados em PT-BR.
-- **Verificações:** testes, treino, ONNX, API e métricas foram executados localmente.
-  `docker compose`, o workflow do GitHub Actions e a execução da DAG dentro do Airflow **precisam
-  ser validados no seu ambiente** (o roteiro de execução acima cobre isso).
+### Orquestração de Retreino
 
-## Vídeo STAR
+A DAG `treino_triagem_laudos`, semanal, será publicada por B em
+`dags/treino_triagem_dag.py`. Suas tarefas serão `carregar_dados` → `treinar_modelo` →
+`exportar_onnx`, usando as funções já integradas em `src/triagem/pipeline_treino.py`.
 
-Roteiro de 5 minutos em [`docs/ROTEIRO_VIDEO_STAR.md`](docs/ROTEIRO_VIDEO_STAR.md).
+### Disponibilização de Novos Modelos
 
-**Link do vídeo:** _(cole aqui o link após gravar)_
+A DAG grava artefatos em `models/`, mas não atualiza automaticamente a API. A API carrega
+seu modelo na inicialização, a partir da imagem, cujo próprio build executa o treinamento.
+Promover o artefato do Airflow para a API requer uma integração adicional; ela não está
+implementada neste protótipo.
+
+---
+
+## Testes
+
+### Executar Testes
+
+A suíte `tests/` será publicada por C. A configuração de Ruff e pytest já está em
+`pyproject.toml`, mas os testes completos ainda não estão integrados nesta etapa.
+Não declarar execução da suíte ou aprovação do workflow remoto antes das respectivas evidências.
+
+---
+
+## Vídeo de Apresentação (Método STAR)
+
+**Duração:** até cinco minutos.  
+**Link:** PREENCHER_LINK_DO_VIDEO.
+
+| Parte | Conteúdo |
+|---|---|
+| **Situation** | Cenário de priorização da leitura de textos médicos |
+| **Task** | API em Docker, CI/build, retreino, monitoramento e otimização |
+| **Action** | Arquitetura e demonstração dos componentes em funcionamento |
+| **Result** | Qualidade, latências medidas, limitações dos dados e lições aprendidas |
+
+O roteiro e o link final serão consolidados por C após as demonstrações e validações da equipe.
+
+---
+
+## Referências e Documentação
+
+### Oficiais
+
+- [Scikit-Learn](https://scikit-learn.org/)
+- [FastAPI](https://fastapi.tiangolo.com/)
+- [ONNX Runtime](https://onnxruntime.ai/docs/)
+- [Apache Airflow 2.10.5](https://airflow.apache.org/docs/apache-airflow/2.10.5/)
+- [Prometheus](https://prometheus.io/docs/introduction/overview/)
+- [Grafana](https://grafana.com/docs/grafana/latest/)
+- [GitHub Actions](https://docs.github.com/en/actions)
+- [Docker](https://docs.docker.com/)
+
+### Datasets
+
+- [Medical Abstracts TC Corpus — fonte dos CSVs](https://github.com/sebischair/Medical-Abstracts-TC-Corpus)
+- [Publicação de referência do corpus](https://doi.org/10.1145/3582768.3582795)
+- [Documentação dos dados utilizados](data/README.md)
+
+---
+
+## 👥 Time
+
+| Nome | RA / RM |
+|---|---|
+| Gustavo Andres Silva Calderon | rm374865 |
+| Lilian Dorini Almagro | rm374368 |
+| Matheus Angelo Filetti | rm373015 |
+
+---
+
+## Licença
+
+**Código do projeto:** a licença de distribuição deve ser definida pela equipe. O pacote
+atual não contém um arquivo `LICENSE`; por isso, esta documentação não declara uma licença MIT
+sem o respectivo arquivo.
+
+**Dados:** o Medical Abstracts TC Corpus informa a licença
+[CC BY-SA 3.0 Unported](https://github.com/sebischair/Medical-Abstracts-TC-Corpus/blob/main/LICENSE).
+A atribuição da fonte e a documentação do conjunto estão em [data/README.md](data/README.md).
+A licença dos dados deve ser distinguida da licença escolhida para o código do projeto.
+
